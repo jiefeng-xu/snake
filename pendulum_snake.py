@@ -17,7 +17,22 @@ How to use the viewer
 ---------------------
 
 Run the script with ``python pendulum_snake.py``. A Matplotlib window opens
+with animated pendulums, three playback buttons, and five sliders that let you
+experiment in real time:
+
+``Start``
+    Resume the motion if you have paused it.
+
+``Pause``
+    Freeze the pendulums so you can talk through the current pattern or adjust
+    the sliders without the scene moving.
+
+``Restart``
+    Jump back to the initial release so the next swing shows the effect of your
+    latest parameter choices from the beginning.
+
 with animated pendulums and five sliders that let you experiment in real time:
+
 
 ``Pendulums``
     Sets how many individual pendulums form the wave. More pendulums mean a
@@ -45,16 +60,18 @@ with animated pendulums and five sliders that let you experiment in real time:
     allows experimentation with how the wave evolves under different gravity
     strengths (for example on the Moon vs. Earth).
 
-You can pause the animation by pressing the ``space`` key. Drag any slider to
-see immediately how the motion changes. Try small length steps for slow,
-mesmerising waves and larger steps for quicker, more chaotic-looking motion.
+Use the on-screen buttons to start, pause, or restart the wave (restart jumps
+back to the initial release so changes take effect from the beginning). Drag
+any slider to see immediately how the motion changes. Try small length steps
+for slow, mesmerising waves and larger steps for quicker, more
+chaotic-looking motion.
 """
 
 from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass
-from typing import Callable, Iterable, List, Sequence, Tuple
+from typing import Callable, List, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -62,7 +79,8 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.axes import Axes
 from matplotlib.artist import Artist
 from matplotlib.lines import Line2D
-from matplotlib.widgets import Slider
+from matplotlib.widgets import Button, Slider
+
 
 
 @dataclass
@@ -227,13 +245,52 @@ def _make_sliders(
     return count_slider, base_slider, step_slider, angle_slider, gravity_slider
 
 
+def _make_buttons(
+    fig: plt.Figure,
+    on_start: Callable[[object], None],
+    on_pause: Callable[[object], None],
+    on_restart: Callable[[object], None],
+) -> Tuple[Button, Button, Button]:
+    """Create buttons to control the animation playback."""
+
+    button_width = 0.18
+    button_height = 0.05
+    button_left = 0.12
+    button_gap = 0.02
+    button_bottom = 0.31
+
+    ax_start = fig.add_axes([button_left, button_bottom, button_width, button_height], facecolor="#101820")
+    ax_pause = fig.add_axes(
+        [button_left + button_width + button_gap, button_bottom, button_width, button_height],
+        facecolor="#101820",
+    )
+    ax_restart = fig.add_axes(
+        [button_left + 2 * (button_width + button_gap), button_bottom, button_width, button_height],
+        facecolor="#101820",
+    )
+
+    start_button = Button(ax_start, "Start", hovercolor="#1f4068")
+    pause_button = Button(ax_pause, "Pause", hovercolor="#1f4068")
+    restart_button = Button(ax_restart, "Restart", hovercolor="#1f4068")
+
+    start_button.on_clicked(on_start)
+    pause_button.on_clicked(on_pause)
+    restart_button.on_clicked(on_restart)
+
+    for button in (start_button, pause_button, restart_button):
+        button.label.set_color("#e0e6f8")
+
+    return start_button, pause_button, restart_button
+
+
 def _add_instructions(fig: plt.Figure) -> None:
     instruction_text = (
-        "Play with the sliders to see how pendulum length, gravity, and release angle\n"
-        "affect the travelling wave pattern. Longer strings swing slower, so a small\n"
-        "length step (for example 0.03 m) keeps neighbouring pendulums nearly in phase.\n"
-        "A larger step exaggerates the timing differences and produces faster-moving\n"
-        "waves. Try lowering gravity to imagine the wave on the Moon!"
+        "Use the buttons to start, pause, or restart the wave, then play with the sliders\n"
+        "to see how pendulum length, gravity, and release angle affect the pattern.\n"
+        "Longer strings swing slower, so a small length step (for example 0.03 m) keeps\n"
+        "neighbouring pendulums nearly in phase. A larger step exaggerates the timing\n"
+        "differences and produces faster-moving waves. Try lowering gravity to imagine\n"
+        "the wave on the Moon!"
     )
     fig.text(0.12, 0.94, instruction_text, fontsize=9, color="#e0e6f8", va="top")
 
@@ -248,23 +305,23 @@ def main() -> None:
     pendulum_plot = PendulumSnakePlot(ax, params)
     _add_instructions(fig)
 
+    time_elapsed = 0.0
+    timestep = 1 / 60
+    is_running = True
+
     def on_slider_change() -> None:
         pendulum_plot.refresh()
+        pendulum_plot.draw(time_elapsed)
         fig.canvas.draw_idle()
 
     # Keep references to the slider widgets so they remain responsive.
     sliders = _make_sliders(fig, params, on_slider_change)
     fig._pendulum_sliders = sliders  # type: ignore[attr-defined]
 
-    def frame_generator() -> Iterable[float]:
-        time_s = 0.0
-        timestep = 1 / 60  # seconds per frame
-        while True:
-            yield time_s
-            time_s += timestep
-
-    def animate(time_s: float):
-        artists = pendulum_plot.draw(time_s)
+    def animate(_frame_index: int):
+        nonlocal time_elapsed
+        artists = pendulum_plot.draw(time_elapsed)
+        time_elapsed += timestep
         return artists
 
     animation = FuncAnimation(
@@ -275,6 +332,31 @@ def main() -> None:
         blit=True,
     )
     fig._pendulum_animation = animation  # type: ignore[attr-defined]
+
+    def start_animation(_event: object) -> None:
+        nonlocal is_running
+        if not is_running:
+            animation.event_source.start()
+            is_running = True
+
+    def pause_animation(_event: object) -> None:
+        nonlocal is_running
+        if is_running:
+            animation.event_source.stop()
+            is_running = False
+
+    def restart_animation(_event: object) -> None:
+        nonlocal time_elapsed, is_running
+        time_elapsed = 0.0
+        pendulum_plot.draw(time_elapsed)
+        fig.canvas.draw_idle()
+        if not is_running:
+            animation.event_source.start()
+            is_running = True
+
+    buttons = _make_buttons(fig, start_animation, pause_animation, restart_animation)
+    fig._pendulum_buttons = buttons  # type: ignore[attr-defined]
+
 
     plt.show()
 
