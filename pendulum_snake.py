@@ -6,15 +6,23 @@ each pendulum has its own natural period, the collection of pendulums forms
 beautiful wave patterns over time – often called a pendulum snake or pendulum
 wave machine.
 
+Quick start
+-----------
+
+1. Install the requirements with ``pip install -r requirements.txt``.
+2. Launch the viewer with ``python pendulum_snake.py``.
+3. Move the sliders at the bottom of the window to experiment with the setup.
+
 How to use the viewer
 ---------------------
 
-Run the script with ``python examples/pendulum_snake.py``. A Matplotlib window
-opens with animated pendulums and five sliders:
+Run the script with ``python pendulum_snake.py``. A Matplotlib window opens
+with animated pendulums and five sliders that let you experiment in real time:
 
 ``Pendulums``
     Sets how many individual pendulums form the wave. More pendulums mean a
-    longer wave train and richer interference patterns.
+    longer wave train and richer interference patterns. Try values between 8
+    and 16 to watch the travelling "beats" slowly move across the array.
 
 ``Base length``
     Sets the starting string length (in metres) of the first pendulum. Longer
@@ -24,11 +32,13 @@ opens with animated pendulums and five sliders:
 ``Length step``
     Adds extra length to each subsequent pendulum. A larger step makes the
     difference between adjacent pendulum periods more pronounced, changing the
-    wave interference pattern.
+    wave interference pattern. Small steps (0.02–0.04 m) keep neighbouring
+    bobs almost in sync, while larger steps produce faster ripples.
 
 ``Release angle``
     Controls the starting angle (in degrees) away from vertical. Higher values
-    give the bobs more energy and wider swings.
+    give the bobs more energy and wider swings. Keep it modest (< 15°) if you
+    want the motion to remain close to the simple pendulum approximation.
 
 ``Gravity``
     Adjusts the gravitational acceleration in metres per second squared. This
@@ -50,6 +60,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
 from matplotlib.axes import Axes
+from matplotlib.artist import Artist
+from matplotlib.lines import Line2D
 from matplotlib.widgets import Slider
 
 
@@ -112,8 +124,8 @@ class PendulumSnakePlot:
     def __init__(self, ax: Axes, params: PendulumParameters) -> None:
         self.ax = ax
         self.params = params
-        self.string_artists: List[plt.Line2D] = []
-        self.bob_artists: List[plt.Line2D] = []
+        self.string_artists: List[Line2D] = []
+        self.bob_artists: List[Line2D] = []
         self._setup_axes()
         self._create_artists()
 
@@ -144,6 +156,8 @@ class PendulumSnakePlot:
         for color in colors:
             (string_line,) = self.ax.plot([], [], lw=2.5, color=color, alpha=0.85)
             (bob_point,) = self.ax.plot([], [], "o", color=color, ms=8)
+            string_line.set_animated(True)
+            bob_point.set_animated(True)
             self.string_artists.append(string_line)
             self.bob_artists.append(bob_point)
 
@@ -153,7 +167,7 @@ class PendulumSnakePlot:
         self._update_limits()
         self._create_artists()
 
-    def draw(self, time_s: float) -> Sequence[plt.Artist]:
+    def draw(self, time_s: float) -> Sequence[Artist]:
         lengths = self.params.lengths()
         omegas = self.params.angular_frequencies(lengths)
         angles = self.params.release_angle_rad * np.cos(omegas * time_s)
@@ -238,7 +252,9 @@ def main() -> None:
         pendulum_plot.refresh()
         fig.canvas.draw_idle()
 
-    _make_sliders(fig, params, on_slider_change)
+    # Keep references to the slider widgets so they remain responsive.
+    sliders = _make_sliders(fig, params, on_slider_change)
+    fig._pendulum_sliders = sliders  # type: ignore[attr-defined]
 
     def frame_generator() -> Iterable[float]:
         time_s = 0.0
@@ -251,7 +267,14 @@ def main() -> None:
         artists = pendulum_plot.draw(time_s)
         return artists
 
-    FuncAnimation(fig, animate, frames=frame_generator(), interval=1000 / 60, blit=True)
+    animation = FuncAnimation(
+        fig,
+        animate,
+        frames=frame_generator(),
+        interval=1000 / 60,
+        blit=True,
+    )
+    fig._pendulum_animation = animation  # type: ignore[attr-defined]
 
     plt.show()
 
