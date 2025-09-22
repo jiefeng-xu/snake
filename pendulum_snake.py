@@ -11,8 +11,7 @@ Quick start
 
 1. Install the requirements with ``pip install -r requirements.txt``.
 2. Launch the viewer with ``python pendulum_snake.py``.
-3. Use the control buttons and sliders at the bottom of the window to
-   experiment with the setup.
+3. Move the sliders at the bottom of the window to experiment with the setup.
 
 How to use the viewer
 ---------------------
@@ -31,6 +30,9 @@ experiment in real time:
 ``Restart``
     Jump back to the initial release so the next swing shows the effect of your
     latest parameter choices from the beginning.
+
+with animated pendulums and five sliders that let you experiment in real time:
+
 
 ``Pendulums``
     Sets how many individual pendulums form the wave. More pendulums mean a
@@ -78,6 +80,7 @@ from matplotlib.axes import Axes
 from matplotlib.artist import Artist
 from matplotlib.lines import Line2D
 from matplotlib.widgets import Button, Slider
+
 
 
 @dataclass
@@ -324,7 +327,7 @@ def main() -> None:
     animation = FuncAnimation(
         fig,
         animate,
-        frames=itertools.count(),
+        frames=frame_generator(),
         interval=1000 / 60,
         blit=True,
     )
@@ -353,6 +356,7 @@ def main() -> None:
 
     buttons = _make_buttons(fig, start_animation, pause_animation, restart_animation)
     fig._pendulum_buttons = buttons  # type: ignore[attr-defined]
+
 
     plt.show()
 
